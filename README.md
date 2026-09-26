@@ -143,6 +143,8 @@ usually 30–60 minutes off at this age:
   than 10 minutes are one sleep; daytime wake windows over 6 hours are treated
   as unlogged naps.
 - Night hours are learned from the last 7 nights (bedtime and morning wake).
+  The night ends at the first wake-up after 04:30 followed by 45 minutes or
+  more awake (earlier in the night, 2.5 hours); the nap after it is a day nap.
 - Awake by day → next nap from recent wake windows, switching to the usual
   bedtime in the evening. Asleep → wake-up from nap length or night stretch,
   capped by the usual morning wake.

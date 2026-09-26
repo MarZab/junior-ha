@@ -15,6 +15,8 @@ Observations from real logs that shaped this:
 - Most night feeds start within minutes of waking, so at night the next feed
   is predicted as "when the baby wakes".
 - Daytime feeds and naps are largely independent of each other.
+- The baby wakes early (~05:30), is up for an hour or more, then naps; that
+  early wake-up ends the night and the nap after it is a day nap.
 
 Pure functions over `Record`s so the same code backs the entity attributes,
 the panel's accuracy line and the offline backtest (scripts/backtest.py).
@@ -50,6 +52,10 @@ DEFAULT_BEDTIME = 19 * 60 + 30
 DEFAULT_WAKE = 7 * 60
 # How early before the usual bedtime the evening counts as night.
 BEDTIME_LEAD = 30
+# From early morning on, being up this long ends the night (earlier in the
+# night only gaps of NIGHT_CONTINUE_GAP do).
+MORNING_FROM = 4 * 60 + 30
+MORNING_AWAKE_MIN = 45
 
 
 def _min(delta: timedelta) -> float:
@@ -152,6 +158,18 @@ class NightPattern:
         return datetime.combine(day, time.min, self.tz) + timedelta(minutes=minutes)
 
 
+def _local_min(t: datetime, tz: tzinfo) -> float:
+    local = t.astimezone(tz)
+    return local.hour * 60 + local.minute
+
+
+def _night_over(woke: datetime, awake: float, tz: tzinfo) -> bool:
+    """Does waking at `woke` and staying up `awake` minutes end the night?"""
+    if awake >= NIGHT_CONTINUE_GAP:
+        return True
+    return awake >= MORNING_AWAKE_MIN and MORNING_FROM <= _local_min(woke, tz) < 12 * 60
+
+
 def night_pattern(sleeps: list[Episode], now: datetime, tz: tzinfo) -> NightPattern:
     done = [s for s in sleeps if s.end is not None]
     today = now.astimezone(tz).date()
@@ -174,14 +192,17 @@ def night_pattern(sleeps: list[Episode], now: datetime, tz: tzinfo) -> NightPatt
             continue
         chain = [done[bed]]
         for s in done[bed + 1 :]:
-            if _min(s.start - chain[-1].end) < NIGHT_CONTINUE_GAP and s.start < d0 + timedelta(days=1, hours=10):
+            if not _night_over(chain[-1].end, _min(s.start - chain[-1].end), tz) and s.start < d0 + timedelta(days=1, hours=10):
                 chain.append(s)
             else:
                 break
         wake = chain[-1].end
-        # Last night may still be going on (the baby could fall back asleep).
-        if _min(now - wake) < NIGHT_CONTINUE_GAP and chain[-1] is done[-1]:
-            continue
+        # Last night may still be going on (the baby could fall back asleep,
+        # or already has).
+        if chain[-1] is done[-1]:
+            back_asleep = sleeps[-1].start if sleeps[-1].end is None and sleeps[-1].start >= wake else now
+            if not _night_over(wake, _min(back_asleep - wake), tz):
+                continue
         if _min(wake - chain[0].start) < 240:
             continue  # not a night
         nights.append(
@@ -193,12 +214,8 @@ def night_pattern(sleeps: list[Episode], now: datetime, tz: tzinfo) -> NightPatt
             )
         )
 
-    def tod(t: datetime) -> float:
-        local = t.astimezone(tz)
-        return local.hour * 60 + local.minute
-
-    beds = [tod(n.bed) + (1440 if tod(n.bed) < 12 * 60 else 0) for n in nights]
-    wakes = [tod(n.wake) for n in nights]
+    beds = [_local_min(n.bed, tz) + (1440 if _local_min(n.bed, tz) < 12 * 60 else 0) for n in nights]
+    wakes = [_local_min(n.wake, tz) for n in nights]
     enough = len(nights) >= MIN_NIGHTS
     q = lambda xs: quantiles(xs) if len(xs) >= MIN_SAMPLES else _small_quantiles(xs)  # noqa: E731
     return NightPattern(
@@ -316,11 +333,12 @@ def predict(records: list[Record], now: datetime, tz: tzinfo) -> Prediction:
     pattern = night_pattern(sleeps, now, tz)
     recent_sleeps = [s for s in _since(sleeps, now, SLEEP_DAYS) if s.end is not None]
 
+    night_ends = {n.wake for n in pattern.nights}
     day_naps = [s.minutes for s in recent_sleeps if not pattern.is_night(s.start)]
     wake_windows = [
         g
         for a, b in zip(recent_sleeps, recent_sleeps[1:])
-        if not pattern.is_night(a.end) and 0 < (g := _min(b.start - a.end)) <= MAX_DAY_WAKE_MIN
+        if (not pattern.is_night(a.end) or a.end in night_ends) and 0 < (g := _min(b.start - a.end)) <= MAX_DAY_WAKE_MIN
     ]
     first_stretch = [n.stretches[0] for n in pattern.nights]
     later_stretch = [x for n in pattern.nights for x in n.stretches[1:]]
@@ -372,11 +390,13 @@ def predict(records: list[Record], now: datetime, tz: tzinfo) -> Prediction:
         )
         if pattern.tod(now) < 12 * 60:
             # Morning: woke before the usual earliest morning wake -> probably
-            # a night waking; otherwise the day has started.
+            # a night waking, unless up long enough that the night is over;
+            # otherwise the day has started.
             day_started = (
                 pattern.wake is None
                 or not pattern.is_night(woke)
                 or pattern.tod(woke) >= pattern.wake[0]
+                or _night_over(woke, _min(now - woke), tz)
             )
             sleep_band, kind = (nap, "nap") if day_started else (back_to_sleep, "back_to_sleep")
         else:
