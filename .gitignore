@@ -1,0 +1,5 @@
+__pycache__/
+.ha-token
+.DS_Store
+*.json.bak
+junior-backup*.json

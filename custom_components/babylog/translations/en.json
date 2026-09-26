@@ -1,0 +1,169 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Junior Baby Log",
+        "description": "Stores entries synced from the Junior iOS app. Babies and their sensors appear automatically once the app syncs."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Already configured."
+    }
+  },
+  "services": {
+    "upsert": {
+      "name": "Upsert records",
+      "description": "Write record versions by id (last write wins on modified_at). Older versions are kept in history and reported as stale. A record with deleted_at set is a soft delete.",
+      "fields": {
+        "records": {
+          "name": "Records",
+          "description": "List of records: id, baby_id, kind, started_at, ended_at, wet, pooped, left_breast, right_breast, amount_ml, amount_confirmed, comment, modified_at, deleted_at."
+        },
+        "babies": {
+          "name": "Babies",
+          "description": "Optional list of babies (id and name) to register or rename."
+        }
+      }
+    },
+    "delete": {
+      "name": "Delete records",
+      "description": "Soft delete records by id. Nothing is removed; the previous version stays in history.",
+      "fields": {
+        "ids": {
+          "name": "IDs",
+          "description": "Record ids to delete."
+        },
+        "deleted_at": {
+          "name": "Deleted at",
+          "description": "When it was deleted (also its modified_at). Defaults to now."
+        }
+      }
+    },
+    "list": {
+      "name": "List records",
+      "description": "Return current record versions (soft-deleted ones included) changed since a time, for reconciliation.",
+      "fields": {
+        "since": {
+          "name": "Since",
+          "description": "Only records modified / deleted after this time."
+        },
+        "summary": {
+          "name": "Summary",
+          "description": "Return only id, modified_at and deleted_at per record."
+        },
+        "baby_id": {
+          "name": "Baby ID",
+          "description": "Only this baby's records."
+        },
+        "include_history": {
+          "name": "Include history",
+          "description": "Add each record's older versions."
+        }
+      }
+    },
+    "export": {
+      "name": "Export backup",
+      "description": "Return one baby's records as a Junior iOS backup file.",
+      "fields": {
+        "baby_id": {
+          "name": "Baby ID",
+          "description": "Required when there is more than one baby."
+        },
+        "include_deleted": {
+          "name": "Include deleted",
+          "description": "Also export soft-deleted entries (with deletedAt). Current app versions would import them as live."
+        }
+      }
+    },
+    "import": {
+      "name": "Import backup",
+      "description": "Import a Junior iOS backup file for one baby.",
+      "fields": {
+        "backup": {
+          "name": "Backup",
+          "description": "Contents of the backup JSON file."
+        },
+        "baby_id": {
+          "name": "Baby ID",
+          "description": "Defaults to the file's baby, or the only known baby."
+        },
+        "mode": {
+          "name": "Mode",
+          "description": "merge adds only unknown ids; replace makes HA match the file: changed entries get a new version, the baby's entries missing from the file are soft-deleted."
+        }
+      }
+    },
+    "stats": {
+      "name": "Statistics",
+      "description": "Per-day totals, timeline segments and a summary for a date range, computed from the stored records (powers the Junior panel).",
+      "fields": {
+        "baby_id": {
+          "name": "Baby ID",
+          "description": "Defaults to the first baby."
+        },
+        "start": {
+          "name": "Start",
+          "description": "First day (local). Defaults to so the range ends today."
+        },
+        "days": {
+          "name": "Days",
+          "description": "Number of days (1–92)."
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Junior Baby Log",
+        "menu_options": {
+          "pair": "Pair a phone",
+          "import_backup": "Import backup",
+          "reset_pairing": "Reset pairing"
+        }
+      },
+      "pair": {
+        "title": "Pair a phone",
+        "description": "Scan this code with the iPhone camera to open Junior and pair it, or copy the link into Junior → Settings → Home Assistant.\n\nThe link only allows syncing the baby log, but treat it like a password.\n\nLink: `{link}`\n\nSync URL: `{url}`",
+        "data": {
+          "qr": "Pairing code"
+        }
+      },
+      "import_backup": {
+        "title": "Import backup",
+        "description": "Upload a Junior backup file (from the app's Backup → Save backup file…, or from this integration's export).",
+        "data": {
+          "file": "Backup file",
+          "baby": "Baby",
+          "mode": "Mode"
+        },
+        "data_description": {
+          "baby": "Which baby the entries belong to. \"From the file\" uses the baby recorded in the file, or the only baby if there is just one. You can also type a new baby id.",
+          "mode": "Nothing is ever erased: replace soft-deletes this baby's entries that aren't in the file."
+        }
+      },
+      "reset_pairing": {
+        "title": "Reset pairing",
+        "description": "Creates a new pairing link. Every paired phone stops syncing until it's paired again with the new code."
+      }
+    },
+    "error": {
+      "invalid_backup": "Not a valid Junior backup: {error}"
+    },
+    "abort": {
+      "imported": "Imported into {baby}: {imported} added, {updated} updated, {unchanged} unchanged, {skipped} skipped, {deleted} soft-deleted.",
+      "not_loaded": "The integration isn't loaded.",
+      "paired": "Done. The phone syncs within a few seconds of pairing.",
+      "pairing_reset": "Pairing reset. Pair your phones again with the new code.",
+      "no_url": "Can't build a pairing link: {error}"
+    }
+  },
+  "selector": {
+    "mode": {
+      "options": {
+        "merge": "Merge — add entries that aren't in Home Assistant yet",
+        "replace": "Replace — make this baby match the file"
+      }
+    }
+  }
+}

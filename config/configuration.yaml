@@ -1,0 +1,19 @@
+default_config:
+
+homeassistant:
+  name: Junior Dev
+  unit_system: metric
+
+logger:
+  default: warning
+  logs:
+    custom_components.babylog: debug
+
+# The Junior panel draws history from the integration's own records, so keep
+# its entities out of the recorder entirely (no short-term history either).
+recorder:
+  exclude:
+    entity_globs:
+      - sensor.*_feeding
+      - binary_sensor.*_sleeping
+      - sensor.*_diaper

@@ -1,0 +1,23 @@
+name: End-to-end
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start Home Assistant
+        run: docker compose up -d
+      - name: Run checks (incl. restart persistence)
+        run: python3 scripts/e2e.py --restart
+      - name: Home Assistant log
+        if: always()
+        run: docker compose logs --no-color | tail -n 300

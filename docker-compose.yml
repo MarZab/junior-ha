@@ -1,0 +1,20 @@
+# Local Home Assistant for developing/testing the babylog integration.
+#   docker compose up -d        -> http://localhost:8123
+#   python3 scripts/e2e.py      -> onboard (dev/devdevdev), set up babylog, run checks
+#   docker compose down -v      -> wipe HA state
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: babylog-ha
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
+    environment:
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ha-config:/config
+      - ./config/configuration.yaml:/config/configuration.yaml:ro
+      - ./custom_components/babylog:/config/custom_components/babylog:ro
+
+volumes:
+  ha-config:

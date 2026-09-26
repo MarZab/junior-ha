@@ -1,0 +1,78 @@
+upsert:
+  fields:
+    records:
+      example: >-
+        [{"id": "6F1C…", "baby_id": "A1B2…", "kind": "feeding",
+        "started_at": "2026-09-26T03:10:00Z", "ended_at": "2026-09-26T03:35:00Z",
+        "left_breast": true, "modified_at": "2026-09-26T03:35:01Z"}]
+      selector:
+        object:
+    babies:
+      example: '[{"id": "A1B2…", "name": "Junior"}]'
+      selector:
+        object:
+delete:
+  fields:
+    ids:
+      required: true
+      example: '["6F1C…"]'
+      selector:
+        object:
+    deleted_at:
+      selector:
+        datetime:
+list:
+  fields:
+    since:
+      selector:
+        datetime:
+    summary:
+      default: false
+      selector:
+        boolean:
+    baby_id:
+      selector:
+        text:
+    include_history:
+      default: false
+      selector:
+        boolean:
+export:
+  fields:
+    baby_id:
+      selector:
+        text:
+    include_deleted:
+      default: false
+      selector:
+        boolean:
+stats:
+  fields:
+    baby_id:
+      selector:
+        text:
+    start:
+      selector:
+        date:
+    days:
+      default: 7
+      selector:
+        number:
+          min: 1
+          max: 92
+import:
+  fields:
+    backup:
+      required: true
+      selector:
+        object:
+    baby_id:
+      selector:
+        text:
+    mode:
+      default: merge
+      selector:
+        select:
+          options:
+            - merge
+            - replace
