@@ -424,14 +424,40 @@ FORECAST_MAX_STEPS = 24
 
 
 FORECAST_HOURS = 16
+FORECAST_PAST_HOURS = 4  # logged history shown before now, for context
 
 
 def _utc_iso(t: datetime) -> str:
     return t.astimezone(timezone.utc).isoformat()
 
 
+def _past(records: list[Record], start: datetime, now: datetime) -> list[dict[str, Any]]:
+    """Logged sleeps and feeds overlapping [start, now], clipped to it; `end`
+    is None while still going on."""
+    out = []
+    for typ, kinds, merge in (
+        ("sleep", [KIND_SLEEP], SLEEP_MERGE_MIN),
+        ("feed", [KIND_FEEDING, KIND_BOTTLE], FEED_MERGE_MIN),
+    ):
+        for e in episodes(records, kinds, merge):
+            if e.start > now or (e.end is not None and e.end < start):
+                continue
+            out.append(
+                {
+                    "type": typ,
+                    "start": _utc_iso(max(e.start, start)),
+                    "end": None if e.end is None else _utc_iso(min(e.end, now)),
+                }
+            )
+    return sorted(out, key=lambda e: e["start"])
+
+
 def forecast(
-    records: list[Record], now: datetime, tz: tzinfo, hours: int = FORECAST_HOURS
+    records: list[Record],
+    now: datetime,
+    tz: tzinfo,
+    hours: int = FORECAST_HOURS,
+    past_hours: int = FORECAST_PAST_HOURS,
 ) -> dict[str, Any]:
     """The next `hours` as a chain of predictions: assume each predicted event
     (fall asleep, wake up, feed) happens at its likely time, then predict the
@@ -441,10 +467,15 @@ def forecast(
     The night counts as sleep apart from feeds: night wakings are still
     simulated (night feeds are timed off them) but not returned; bedtime and
     the morning wake-up are.
+
+    The range starts `past_hours` before now, with what was logged in that
+    time under `past`.
     """
+    start = now - timedelta(hours=past_hours)
     end = now + timedelta(hours=hours)
     horizon = now - timedelta(days=SLEEP_DAYS + 2)
     recs = [r for r in records if r.started_at >= horizon or r.ended_at is None]
+    past = _past(recs, start, now)
     first = predict(recs, now, tz)
     events: list[dict[str, Any]] = []
     var_lo = var_hi = 0.0
@@ -507,8 +538,10 @@ def forecast(
         and not (e["type"] == "sleep" and e["kind"] == "back_to_sleep")
     ]
     return {
-        "start": _utc_iso(now),
+        "start": _utc_iso(start),
+        "now": _utc_iso(now),
         "end": _utc_iso(end),
+        "past": past,
         "asleep": first.asleep,
         "bedtime": first.as_dict()["bedtime"],
         "morning_wake": first.as_dict()["morning_wake"],

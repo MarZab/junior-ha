@@ -149,7 +149,7 @@ function rhythmChart(data, dayLabel) {
 const legend = (items) =>
   `<div class="legend">${items.map(([name, color]) => `<span><i style="background:${color}"></i>${esc(name)}</span>`).join("")}</div>`;
 
-// MARK: next-16-hours forecast
+// MARK: forecast (last 4 hours + next 16)
 
 function eventLabel(e) {
   if (e.type === "feed") return "Feed";
@@ -183,13 +183,15 @@ function forecastRows(f) {
 
 /** Gantt chart of the predicted events: one row each, so windows never
  *  overlap. Pale bar = window, mark = likely time; a nap row spans from the
- *  likely start to the likely wake-up. */
+ *  likely start to the likely wake-up. The range starts a few hours back, with
+ *  what was logged then in a first "Logged" row. */
 function forecastChart(f, lang) {
   if (!f.events.length) return `<div class="empty">Not enough recent data to predict yet.</div>`;
-  const rows = forecastRows(f);
+  const rows = [{ past: f.past ?? [] }, ...forecastRows(f)];
   const W = 1000, L = 150, R = 110, T = 24, rowH = 28, gap = 6;
   const H = T + rows.length * (rowH + gap);
   const t0 = new Date(f.start).getTime(), t1 = new Date(f.end).getTime();
+  const tNow = new Date(f.now ?? f.start).getTime();
   const x = (ms) => L + ((Math.min(Math.max(ms, t0), t1) - t0) / (t1 - t0)) * (W - L - R);
   const ms = (iso) => new Date(iso).getTime();
   const tm = (iso) => new Date(iso).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" });
@@ -223,8 +225,17 @@ function forecastChart(f, lang) {
   rows.forEach((row, i) => {
     const y = T + i * (rowH + gap);
     svg += `<rect x="${L}" y="${y}" width="${W - L - R}" height="${rowH}" rx="6" class="rowbg"/>`;
-    if (row.nap) {
-      const from = row.start ? ms(row.start.likely) : t0;
+    if (row.past) {
+      svg += `<text x="${L - 12}" y="${y + rowH / 2 + 4}" class="ylab">Logged</text>`;
+      for (const e of row.past) {
+        const a = x(ms(e.start)), b = x(e.end ? ms(e.end) : tNow);
+        const sleep = e.type === "sleep";
+        const h = sleep ? rowH - 8 : (rowH - 8) * 0.5;
+        const tip = `${sleep ? "Sleep" : "Feed"} ${tm(e.start)}–${e.end ? tm(e.end) : "now"}`;
+        svg += `<rect x="${a}" y="${y + (rowH - h) / 2}" width="${Math.max(b - a, 3)}" height="${h}" rx="${h / 2}" fill="${sleep ? C.sleep : C.bottle}"><title>${esc(tip)}</title></rect>`;
+      }
+    } else if (row.nap) {
+      const from = row.start ? ms(row.start.likely) : tNow;
       const to = row.end ? ms(row.end.likely) : t1;
       svg += `<text x="${L - 12}" y="${y + rowH / 2 + 4}" class="ylab">${row.start ? "Nap" : "Napping"}</text>`;
       if (row.start) svg += windowBar(row.start, y, C.sleep);
@@ -253,7 +264,7 @@ function forecastChart(f, lang) {
       svg += label(tm(e.likely), x(ms(e.latest)), y);
     }
   });
-  svg += `<line x1="${L}" x2="${L}" y1="${T - 6}" y2="${H}" class="now"/>`;
+  svg += `<line x1="${x(tNow)}" x2="${x(tNow)}" y1="${T - 6}" y2="${H}" class="now"/>`;
   return `<svg viewBox="0 0 ${W} ${H + 4}" class="chart" style="aspect-ratio:${W}/${H + 4}">${svg}</svg>`;
 }
 
@@ -440,13 +451,13 @@ class JuniorPanel extends HTMLElement {
     }
   }
 
-  /** The next 16 hours: predicted naps, bedtime, wake-ups and feeds (at night
-   *  only feeds). Only on the Day view of today. */
+  /** The last 4 hours as logged, then the next 16 predicted: naps, bedtime,
+   *  wake-ups and feeds (at night only feeds). Only on the Day view of today. */
   _nextCard(d) {
     const f = d.forecast;
     if (!f || d.days.length !== 1 || d.days[0].date !== isoDate(new Date())) return "";
     return `<ha-card class="wide next">
-      <div class="head"><h2>Next 16 hours</h2>${legend([["Sleep", C.sleep], ["Feed", C.bottle]])}</div>
+      <div class="head"><h2>Forecast</h2>${legend([["Sleep", C.sleep], ["Feed", C.bottle]])}</div>
       ${forecastChart(f, this._lang())}
     </ha-card>`;
   }

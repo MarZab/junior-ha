@@ -20,7 +20,7 @@ DEFAULT_BABY_NAME = "Baby"
 # Entity keys per platform. Anything else registered for the entry (entities
 # from earlier versions) is removed on setup.
 SENSOR_KEYS = {"feeding", "diaper"}
-BINARY_SENSOR_KEYS = {"sleeping"}
+BINARY_SENSOR_KEYS = {"sleeping", "feed_window"}
 
 SERVICE_UPSERT = "upsert"
 SERVICE_DELETE = "delete"

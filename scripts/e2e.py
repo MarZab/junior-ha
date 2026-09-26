@@ -565,18 +565,32 @@ def run(client: Client, restart: bool) -> None:
     evs = fc["events"]
     check("forecast has a chain of events", len(evs) >= 3 and {e["type"] for e in evs} >= {"feed"}, fc)
     check(
-        "forecast covers 16 h, no night wakings shown",
-        (datetime.fromisoformat(fc["end"]) - datetime.fromisoformat(fc["start"])) == timedelta(hours=16)
+        "forecast covers 4 h back and 16 h ahead, no night wakings shown",
+        (datetime.fromisoformat(fc["now"]) - datetime.fromisoformat(fc["start"])) == timedelta(hours=4)
+        and (datetime.fromisoformat(fc["end"]) - datetime.fromisoformat(fc["now"])) == timedelta(hours=16)
         and not any((e["type"], e["kind"]) in (("wake", "night"), ("sleep", "back_to_sleep")) for e in evs),
         evs,
     )
     ts = datetime.fromisoformat
     check(
         "forecast stays within range, ordered, windows around likely",
-        all(ts(fc["start"]) <= ts(e["earliest"]) <= ts(e["likely"]) <= ts(e["latest"]) for e in evs)
+        all(ts(fc["now"]) <= ts(e["earliest"]) <= ts(e["likely"]) <= ts(e["latest"]) for e in evs)
         and all(ts(e["likely"]) <= ts(fc["end"]) for e in evs)
         and [ts(e["likely"]) for e in evs] == sorted(ts(e["likely"]) for e in evs),
         evs,
+    )
+    check(
+        "forecast carries the logged last 4 h",
+        fc["past"] and all(ts(fc["start"]) <= ts(e["start"]) <= ts(e["end"] or fc["now"]) <= ts(fc["now"]) for e in fc["past"]),
+        fc["past"],
+    )
+    window = client.state("binary_sensor.demo_feed_window")
+    in_window = ts(feeding["next_feed_earliest"]) <= datetime.now(UTC) <= ts(feeding["next_feed_latest"])
+    check(
+        "feed window matches next_feed window",
+        window["state"] == ("on" if in_window else "off")
+        and window["attributes"].get("next_feed_earliest") == feeding["next_feed_earliest"],
+        (window, feeding.get("next_feed_earliest"), feeding.get("next_feed_latest")),
     )
     check("tiles get % of usual", isinstance(st["summary"]["milk_pct"], int) and isinstance(st["summary"]["sleep_pct"], int), st["summary"])
     acc = st["accuracy"]

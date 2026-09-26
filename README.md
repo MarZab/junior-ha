@@ -16,7 +16,7 @@ statistics and a 16-hour prediction, and a dashboard card.
 - **Predictions** of the next nap, bedtime, wake-up and feed as time windows,
   learned from the last days of logs.
 - **Junior panel** in the sidebar: day / week / month statistics, a 24-hour
-  rhythm chart per day and a Gantt chart of the next 16 hours.
+  rhythm chart per day and a Gantt chart of the last 4 and next 16 hours.
 - **Dashboard card** `custom:junior-card`.
 - **Backups**: import and export in the app's backup format; nothing is ever
   deleted (soft deletes with full version history).
@@ -57,7 +57,7 @@ Babies, devices and entities appear as soon as the app syncs.
 
 ## Entities
 
-Three per baby. The state says what's happening (or what the last event was)
+Four per baby. The state says what's happening (or what the last event was)
 and `since` says from when; everything else is an attribute.
 
 | Entity | State | Attributes |
@@ -65,6 +65,7 @@ and `since` says from when; everything else is an attribute.
 | `sensor.<baby>_feeding` | none / bottle / left / right (`breast` without a single side) | since, last_feed, last_feed_started_at, last_feed_minutes, last_amount_ml, milk_today_ml, milk_today_pct, feeds_today, next_feed_*, last_sync |
 | `binary_sensor.<baby>_sleeping` | on / off | since, last_sleep_minutes, sleep_today_min, sleep_today_pct, next_sleep_* / wake_*, bedtime, morning_wake |
 | `sensor.<baby>_diaper` | last change: wet / poopy / both | since, last_poop |
+| `binary_sensor.<baby>_feed_window` | on while now is inside the predicted next-feed window | next_feed_* |
 
 - `since`: when feeding / sleep started, or when the last one ended (so "time
   since the last feed" and wake windows come straight from it).
@@ -73,15 +74,15 @@ and `since` says from when; everything else is an attribute.
 - `next_*` / `wake_*`: predictions, see below.
 
 Sensors recompute when a record changes (and at local midnight); there is no
-polling.
+polling. `feed_window` also flips on its own at the window's edges.
 
 ### Example automation
 
 ```yaml
 triggers:
-  - trigger: template
-    value_template: >
-      {{ now() >= state_attr('sensor.baby_feeding', 'next_feed_earliest') | as_datetime }}
+  - trigger: state
+    entity_id: binary_sensor.baby_feed_window
+    to: "on"
 actions:
   - action: notify.mobile_app_phone
     data:
@@ -101,6 +102,7 @@ recorder:
       - sensor.*_feeding
       - binary_sensor.*_sleeping
       - sensor.*_diaper
+      - binary_sensor.*_feed_window
 ```
 
 ## Junior panel
@@ -111,8 +113,9 @@ records, so it reaches back as far as the app's logs do:
 - Day / Week / Month with ‹ › and Today (opens on today).
 - Tiles for milk, feeds, sleep and diapers. In Day view milk and sleep fill up
   to their percentage of a usual day.
-- **Next 16 hours** (today only): a Gantt chart of predicted naps, bedtime,
-  wake-up and feeds; bars are the windows, marks the most likely times.
+- **Forecast** (today only): a Gantt chart from 4 hours ago to 16 hours ahead.
+  The first row is what was logged so far; below it the predicted naps,
+  bedtime, wake-up and feeds; bars are the windows, marks the most likely times.
 - **Rhythm**: a 24-hour timeline per day with sleeps, feeds, diapers and notes.
 - Milk and diaper bars (per hour in Day view, per day otherwise) and sleep per
   day (night vs naps) for longer ranges.
